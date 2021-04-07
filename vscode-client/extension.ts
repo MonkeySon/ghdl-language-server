@@ -35,6 +35,21 @@ class EntityItem implements vscode.QuickPickItem {
 	}
 }
 
+// As of 04/07/2021:
+// Stopping / disposing the client (and server) seems to work, but leads to the following error:
+// "rejected promise not handled within 1 second: Error [ERR_STREAM_WRITE_AFTER_END]: write after end"
+// See: https://github.com/microsoft/vscode-languageserver-node/issues/723
+async function restart_client() {
+	if (client) {
+		if (client.needsStop()) {
+			await client.stop();
+		}
+		if (client.needsStart()) {
+			client.start();
+		}
+	}
+}
+
 async function instantiate_entity() {
 	await client.sendRequest(ExtraRequest.GetAllEntities)
 	.then(ent => {
