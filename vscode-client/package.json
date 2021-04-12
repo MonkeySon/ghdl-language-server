@@ -17,7 +17,8 @@
 		"vhdl"
 	],
 	"activationEvents": [
-		"onLanguage:vhdl"
+		"onLanguage:vhdl",
+		"onCommand:ghdl-ls.createproject"
 	],
 	"main": "./extension",
 	"contributes": {
@@ -76,6 +77,11 @@
 			{
 				"command": "ghdl-ls.shownode",
 				"title": "Show node info"
+			},
+			{
+				"command": "ghdl-ls.createproject",
+				"title": "Create project",
+				"category": "VHDL"
 			}
 		],
 		"menus": {
@@ -83,6 +89,12 @@
 				{
 					"command": "ghdl-ls.shownode",
 					"when": "editorTextFocus && resourceLangId == vhdl"
+				}
+			],
+			"commandPalette": [
+				{
+					"command": "ghdl-ls.createproject",
+					"when": "workspaceFolderCount >= 1"
 				}
 			]
 		},

@@ -4,6 +4,8 @@
  * ------------------------------------------------------------------------------------------ */
 
 import * as vscode from 'vscode';
+import * as path from 'path';
+import * as fs from 'fs';
 
 import {
 	LanguageClient,
@@ -48,6 +50,83 @@ async function restart_client() {
 			client.start();
 		}
 	}
+}
+
+// Creates an empty project in the current workspace or guides the user through
+// project creation when more workspaces are open and/or the selected workspace
+// conatins *.vhd files
+async function create_project() {
+	// Get open workspaces
+	const workspace_folders = vscode.workspace.workspaceFolders
+	let selected_workspace_folder: vscode.WorkspaceFolder = undefined
+
+	if (!workspace_folders) {
+		vscode.window.showWarningMessage('No folder opened to create project in!')
+		return
+	} else if (workspace_folders.length == 1) {
+		selected_workspace_folder = workspace_folders[0]
+	} else {
+		// Ask user in which workspace the project should be created
+		const workspace_index = await vscode.window.showQuickPick(
+			workspace_folders.map((workspaceFolder, index) => { return { label: workspaceFolder.name, detail: workspaceFolder.uri.path, index } }),
+			{ placeHolder: 'Choose a folder in which the project should be created in:', canPickMany: false }
+		).then(result => result.index)
+		selected_workspace_folder = workspace_folders[workspace_index]
+	}
+
+	// Check if project file already exists in the root directory of the chosen workspace
+	const prj_already_exists = (await vscode.workspace.findFiles(new vscode.RelativePattern(selected_workspace_folder, 'hdl-prj.json'))).length != 0
+
+	if (prj_already_exists) {
+		vscode.window.showErrorMessage('A project already exists in folder ' + selected_workspace_folder.name + '!')
+		return
+	}
+
+	// Check for existing *.vhd files in current workspace
+	const vhdl_uris = await vscode.workspace.findFiles(new vscode.RelativePattern(selected_workspace_folder, '**/*.vhd'))
+	let add_all_existing_vhdl_files = false
+
+	// Ask user if existing *.vhd files should be added to new project
+	if (vhdl_uris.length > 0) {
+		add_all_existing_vhdl_files = await vscode.window.showQuickPick(
+			[{ label: 'Yes', bool_value: true }, { label: 'No', bool_value: false }],
+			{ placeHolder: 'Add' + (vhdl_uris.length == 1 ? ' existing VHDL file' : ' all existing VHDL files') + ' to project?' }
+		).then(result => result.bool_value)
+	}
+
+	let hdl_prj_json = {
+		"options": {
+			"ghdl_analysis": [
+				"--workdir=work",
+				"--ieee=synopsys",
+				"-fexplicit"
+			]
+		},
+		"files": []
+	}
+
+	const selected_workspace_folder_with_sep = selected_workspace_folder.uri.path + path.sep
+
+	// Add all VHDL files to project file if user chose so
+	if (add_all_existing_vhdl_files) {
+		hdl_prj_json.files = vhdl_uris.map(uri => { return { "file": uri.path.replace(selected_workspace_folder_with_sep, ''), "language": "vhdl" } })
+	}
+
+	// Create project file
+	const project_file = vscode.Uri.file(selected_workspace_folder_with_sep + 'hdl-prj.json')
+	try {
+		fs.writeFileSync(project_file.fsPath, JSON.stringify(hdl_prj_json, undefined, 4))
+	} catch {
+		vscode.window.showErrorMessage('Could not create project file!')
+		return
+	}
+
+	// Open project file to signal sucess
+	vscode.workspace.openTextDocument(project_file)
+		.then(document => vscode.window.showTextDocument(document))
+
+	// Restart client (which also restarts server) to reload new project file
+	restart_client()
 }
 
 async function instantiate_entity() {
@@ -151,8 +230,12 @@ export function activate(context: vscode.ExtensionContext) {
 			oc.show();
 		}
 	))
+	
 	context.subscriptions.push(vscode.commands.registerCommand(
 		'ghdl-ls.instantiate-entity', instantiate_entity))
+
+	context.subscriptions.push(vscode.commands.registerCommand(
+		'ghdl-ls.createproject', create_project))
 }
 
 export function deactivate(): Thenable<void> | undefined {
