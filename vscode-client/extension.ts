@@ -171,6 +171,41 @@ async function instantiate_entity() {
 	})
 }
 
+// Map that holds disposable entries, identified by a string key.
+// Entries can be set or deleted (which also disposes them) individually.
+// Diposing the whole map disposes all current entries of the map as well.
+class DisposableMap {
+
+	m_map = new Map<string, vscode.Disposable>()
+
+	has(key:string): boolean {
+		return this.m_map.has(key)
+	}
+
+	set(key:string, disposable:vscode.Disposable): boolean {
+		if(!this.m_map.has(key)) {
+			this.m_map.set(key, disposable)
+			return true
+		}
+		return false
+	}
+
+	dispose_and_delete(key:string): boolean {
+		if(this.m_map.has(key)) {
+			this.m_map.get(key).dispose()
+			this.m_map.delete(key)
+			return true
+		}
+		return false
+	}
+
+	dispose() {
+		this.m_map.forEach((disposable, key) => {
+			disposable.dispose()
+		})
+	}
+}
+
 export function activate(context: vscode.ExtensionContext) {
 	let serverPath = "ghdl-ls";
 
@@ -236,6 +271,41 @@ export function activate(context: vscode.ExtensionContext) {
 
 	context.subscriptions.push(vscode.commands.registerCommand(
 		'ghdl-ls.createproject', create_project))
+
+	// Diposable map to keep track of all project file watchers in each open folder
+	let project_file_watcher_disposable_map = new DisposableMap()
+
+	// Create project file watcher for each open folder (if any are open)
+	if(vscode.workspace.workspaceFolders) {
+		vscode.workspace.workspaceFolders.forEach((wsf) => {
+			let watcher = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(wsf, 'hdl-prj.json'))
+			watcher.onDidChange(restart_client)
+			watcher.onDidCreate(restart_client)
+			watcher.onDidDelete(restart_client)
+			project_file_watcher_disposable_map.set(wsf.uri.fsPath, watcher)
+		});
+	}
+
+	// Handle workspace folder change events:
+	//  * Added  : create project file watcher for folder
+	//  * Removed: dispose prior created project file watcher
+	vscode.workspace.onDidChangeWorkspaceFolders((event) => {
+		event.added.forEach((wsf) => {
+			if(!project_file_watcher_disposable_map.has(wsf.uri.fsPath)) {
+				let watcher = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(wsf, 'hdl-prj.json'))
+				watcher.onDidChange(restart_client)
+				watcher.onDidCreate(restart_client)
+				watcher.onDidDelete(restart_client)
+				project_file_watcher_disposable_map.set(wsf.uri.fsPath, watcher)
+			}
+		})
+		event.removed.forEach((wsf) => {
+			project_file_watcher_disposable_map.dispose_and_delete(wsf.uri.fsPath)
+		})
+	})
+
+	// Push disposable map to subscriptions so that all remaining project file watchers will be disposed on extension deactivation
+	context.subscriptions.push(project_file_watcher_disposable_map)
 }
 
 export function deactivate(): Thenable<void> | undefined {
