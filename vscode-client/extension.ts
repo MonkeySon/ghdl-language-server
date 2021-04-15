@@ -275,30 +275,27 @@ export function activate(context: vscode.ExtensionContext) {
 	// Diposable map to keep track of all project file watchers in each open folder
 	let project_file_watcher_disposable_map = new DisposableMap()
 
-	// Create project file watcher for each open folder (if any are open)
-	if(vscode.workspace.workspaceFolders) {
-		vscode.workspace.workspaceFolders.forEach((wsf) => {
+	// Helper function to register a project file watcher and add it to the disposable map
+	let register_project_file_watcher = (wsf: vscode.WorkspaceFolder) => {
+		if(!project_file_watcher_disposable_map.has(wsf.uri.fsPath)) {
 			let watcher = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(wsf, 'hdl-prj.json'))
 			watcher.onDidChange(restart_client)
 			watcher.onDidCreate(restart_client)
 			watcher.onDidDelete(restart_client)
 			project_file_watcher_disposable_map.set(wsf.uri.fsPath, watcher)
-		});
+		}
+	}
+
+	// Create project file watcher for each open folder, if there are any
+	if(vscode.workspace.workspaceFolders) {
+		vscode.workspace.workspaceFolders.forEach(register_project_file_watcher)
 	}
 
 	// Handle workspace folder change events:
-	//  * Added  : create project file watcher for folder
+	//  * Added  : create project file watcher for all added folders
 	//  * Removed: dispose prior created project file watcher
 	vscode.workspace.onDidChangeWorkspaceFolders((event) => {
-		event.added.forEach((wsf) => {
-			if(!project_file_watcher_disposable_map.has(wsf.uri.fsPath)) {
-				let watcher = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(wsf, 'hdl-prj.json'))
-				watcher.onDidChange(restart_client)
-				watcher.onDidCreate(restart_client)
-				watcher.onDidDelete(restart_client)
-				project_file_watcher_disposable_map.set(wsf.uri.fsPath, watcher)
-			}
-		})
+		event.added.forEach(register_project_file_watcher)
 		event.removed.forEach((wsf) => {
 			project_file_watcher_disposable_map.dispose_and_delete(wsf.uri.fsPath)
 		})
