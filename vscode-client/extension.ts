@@ -68,7 +68,7 @@ async function create_project() {
 	} else {
 		// Ask user in which workspace the project should be created
 		const workspace_index = await vscode.window.showQuickPick(
-			workspace_folders.map((workspaceFolder, index) => { return { label: workspaceFolder.name, detail: workspaceFolder.uri.path, index } }),
+			workspace_folders.map((workspaceFolder, index) => { return { label: workspaceFolder.name, detail: workspaceFolder.uri.fsPath, index } }),
 			{ placeHolder: 'Choose a folder in which the project should be created in:', canPickMany: false }
 		).then(result => result.index)
 		selected_workspace_folder = workspace_folders[workspace_index]
@@ -105,11 +105,11 @@ async function create_project() {
 		"files": []
 	}
 
-	const selected_workspace_folder_with_sep = selected_workspace_folder.uri.path + path.sep
+	const selected_workspace_folder_with_sep = selected_workspace_folder.uri.fsPath + path.sep
 
 	// Add all VHDL files to project file if user chose so
 	if (add_all_existing_vhdl_files) {
-		hdl_prj_json.files = vhdl_uris.map(uri => { return { "file": uri.path.replace(selected_workspace_folder_with_sep, ''), "language": "vhdl" } })
+		hdl_prj_json.files = vhdl_uris.map(uri => { return { "file": uri.fsPath.replace(selected_workspace_folder_with_sep, ''), "language": "vhdl" } })
 	}
 
 	// Create project file
